@@ -12,6 +12,8 @@ D:\MN-U3
 ├── app.py                      # UI Streamlit (navegación Sesión 12 / Sesión 13)
 ├── trapezoidal_solver.py       # Sesión 12: trapecio simple/compuesto, evaluador simbólico, convergencia
 ├── simpson_solver.py           # Sesión 13: Simpson 1/3, 3/8, combinado, datos tabulares, convergencia
+├── teclado.py                  # Teclado en pantalla, parámetros automáticos y límites tipo "pi/2"
+├── parser_util.py              # Parser tolerante (2x, ^, ln, sen, pi, e)
 ├── instrucciones_sesion12.md   # Especificación Sesión 12
 ├── instrucciones_sesion13.md   # Especificación Sesión 13
 ├── README.md

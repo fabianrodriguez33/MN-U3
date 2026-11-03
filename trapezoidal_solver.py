@@ -4,7 +4,7 @@ import pandas as pd
 import sympy as sp
 from scipy.integrate import quad
 
-_SAFE_NAMES = {"pi": sp.pi, "e": sp.E, "E": sp.E}
+from parser_util import parsear
 
 
 def trapecio_simple(f, a, b):
@@ -42,11 +42,7 @@ def max_segunda_derivada(expr_str, var_name, a, b, params=None, muestras=2001):
 
 
 def _parse(expr_str, var_name, params):
-    x = sp.Symbol(var_name)
-    local = {**_SAFE_NAMES, var_name: x}
-    for k in params:
-        local[k] = sp.Symbol(k)
-    expr = sp.sympify(expr_str.replace("^", "**"), locals=local)
+    expr, x = parsear(expr_str, var_name)
     expr = expr.subs({sp.Symbol(k): v for k, v in params.items()})
     libres = expr.free_symbols - {x}
     if libres:

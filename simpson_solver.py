@@ -5,9 +5,8 @@ import numpy as np
 import pandas as pd
 import sympy as sp
 
+from parser_util import parsear
 from trapezoidal_solver import valor_exacto
-
-_SAFE_NAMES = {"pi": sp.pi, "e": sp.E, "E": sp.E}
 
 
 def _malla(f_or_y, a, b, n, x):
@@ -107,14 +106,7 @@ def trapecio_datos(y, x):
 
 def evaluador_simbolico(expr_str, variables_dict=None, x_var="x"):
     """Expresión -> función NumPy f(x). variables_dict: {parámetro: valor}. Retorna (f, expr)."""
-    params = variables_dict or {}
-    x = sp.Symbol(x_var)
-    local = {**_SAFE_NAMES, x_var: x, **{k: sp.Symbol(k) for k in params}}
-    expr = sp.sympify(expr_str.replace("^", "**"), locals=local)
-    expr = expr.subs({sp.Symbol(k): v for k, v in params.items()})
-    libres = expr.free_symbols - {x}
-    if libres:
-        raise ValueError(f"Parámetros sin valor: {sorted(str(s) for s in libres)}")
+    expr, x = _expr(expr_str, variables_dict, x_var)
     g = sp.lambdify(x, expr, "numpy")
 
     def f(v):
@@ -124,13 +116,19 @@ def evaluador_simbolico(expr_str, variables_dict=None, x_var="x"):
     return f, expr
 
 
+def _expr(expr_str, variables_dict, x_var):
+    params = variables_dict or {}
+    expr, x = parsear(expr_str, x_var)
+    expr = expr.subs({sp.Symbol(k): v for k, v in params.items()})
+    libres = expr.free_symbols - {x}
+    if libres:
+        raise ValueError(f"Parámetros sin valor: {sorted(str(s) for s in libres)}")
+    return expr, x
+
+
 def cota_error_13(expr_str, a, b, n, variables_dict=None, x_var="x", muestras=2001):
     """|E| <= n h^5 / 180 * max|f''''| (ec. compuesta). Retorna (cota, max|f4|)."""
-    params = variables_dict or {}
-    x = sp.Symbol(x_var)
-    local = {**_SAFE_NAMES, x_var: x, **{k: sp.Symbol(k) for k in params}}
-    expr = sp.sympify(expr_str.replace("^", "**"), locals=local)
-    expr = expr.subs({sp.Symbol(k): v for k, v in params.items()})
+    expr, x = _expr(expr_str, variables_dict, x_var)
     d4 = sp.lambdify(x, sp.diff(expr, x, 4), "numpy")
     xs = np.linspace(a, b, muestras)
     m = float(np.max(np.abs(d4(xs) * np.ones_like(xs))))

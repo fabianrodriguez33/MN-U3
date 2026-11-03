@@ -9,6 +9,7 @@ import streamlit as st
 
 import simpson_solver as ss
 import trapezoidal_solver as ts
+from teclado import entrada_funcion, limite, parametros_auto
 
 st.set_page_config(page_title="Integración Numérica", layout="wide")
 
@@ -63,17 +64,14 @@ def vista_sesion_12():
                      width="stretch", hide_index=True)
     else:
         st.subheader("Integrador personalizado")
-        st.caption("Use ^ o ** para potencias; funciones: sin, cos, exp, log, sqrt, pi, e…")
-        col1, col2 = st.columns(2)
-        expr_str = col1.text_input("f(x, parámetros)", "A*sin(k*x)/(1+x^2)")
-        var = col2.text_input("Variable de integración", "x")
-        params_txt = st.text_input("Parámetros (nombre=valor, separados por coma)", "A=2, k=3")
+        var = st.selectbox("Variable de integración", ["x", "t", "u"], key="v12")
+        expr_str = entrada_funcion("f12", "A*sin(k*x)/(1+x^2)", var, "f(variable, parámetros)")
+        params = parametros_auto("f12", expr_str, var)
         c1, c2, c3 = st.columns(3)
-        a = c1.number_input("a", value=0.0)
-        b = c2.number_input("b", value=5.0)
         n = c3.number_input("n", min_value=1, max_value=100000, value=10, step=1)
         try:
-            params = parse_params(params_txt)
+            a = limite("a", "0", "a12", c1)
+            b = limite("b", "5", "b12", c2)
             f, expr = ts.evaluador_simbolico(expr_str, var.strip(), params)
             st.latex("f(" + var + ")=" + sp.latex(expr))
             n = int(n)
@@ -98,14 +96,6 @@ def vista_sesion_12():
             st.dataframe(conv, width="stretch", hide_index=True)
         except Exception as e:
             st.error(f"Entrada inválida: {e}")
-
-
-def parse_params(txt):
-    params = {}
-    for p in filter(None, (s.strip() for s in txt.split(","))):
-        k, v = p.split("=")
-        params[k.strip()] = float(v)
-    return params
 
 
 # ----------------------------------------------------------------------------- Sesión 13
@@ -171,17 +161,15 @@ def vista_sesion_13():
 
     with tab2:
         st.subheader("Función continua y personalizada")
-        c1, c2 = st.columns([3, 1])
-        expr_str = c1.text_input("f(var, parámetros)", "exp(x)*cos(x)", key="e13")
-        var = c2.selectbox("Variable", ["x", "t", "u"], key="v13")
-        params_txt = st.text_input("Parámetros (nombre=valor, separados por coma)", "", key="p13")
+        var = st.selectbox("Variable", ["x", "t", "u"], key="v13")
+        expr_str = entrada_funcion("f13", "exp(x)*cos(x)", var, "f(variable, parámetros)")
+        params = parametros_auto("f13", expr_str, var)
         c1, c2, c3, c4 = st.columns(4)
-        a = c1.number_input("a", value=0.0, key="a13")
-        b = c2.number_input("b", value=1.2, key="b13")
         n = int(c3.number_input("n", min_value=2, max_value=100000, value=6, step=1, key="n13"))
         metodo = c4.selectbox("Método", ["Simpson 1/3", "Simpson 3/8", "Combinado"], key="m13")
         try:
-            params = parse_params(params_txt) if params_txt.strip() else {}
+            a = limite("a", "0", "a13", c1)
+            b = limite("b", "1.2", "b13", c2)
             f, expr = ss.evaluador_simbolico(expr_str, params, var)
             st.latex(f"f({var})=" + sp.latex(expr))
             exacto = ts.valor_exacto(f, a, b)
