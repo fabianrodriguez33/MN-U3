@@ -16,13 +16,9 @@ D:\MN-U3
 ├── ode_solver.py               # Sesión 14: Euler, Heun, RK3, RK4, PVI y convergencia
 ├── teclado.py                  # Teclado en pantalla, parámetros automáticos, límites tipo "pi/2"
 ├── parser_util.py              # Parser tolerante (2x, ^, ln, sen, pi, e; una o dos variables)
-├── instrucciones_sesion12.md   # Especificación Sesión 12
-├── instrucciones_sesion13.md   # Especificación Sesión 13
-├── instrucciones_sesion14.md   # Especificación Sesión 14
 ├── README.md
 ├── requirements.txt            # streamlit, numpy, pandas, matplotlib, sympy, scipy
-├── .gitignore
-└── .claude/launch.json         # Servidor de desarrollo (puerto 8501)
+└── .gitignore
 ```
 
 ## Instalación y ejecución
