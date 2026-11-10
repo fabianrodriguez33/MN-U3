@@ -7,6 +7,7 @@ import pandas as pd
 import sympy as sp
 import streamlit as st
 
+import ode_solver as od
 import simpson_solver as ss
 import trapezoidal_solver as ts
 from teclado import entrada_funcion, limite, parametros_auto
@@ -15,7 +16,8 @@ st.set_page_config(page_title="Integración Numérica", layout="wide")
 
 SESION_12 = "📌 Sesión 12: Regla del Trapecio (Tráfico de Red)"
 SESION_13 = "📌 Sesión 13: Reglas de Simpson (Terreno e Integración Curva)"
-sesion = st.sidebar.radio("Sesión", [SESION_12, SESION_13])
+SESION_14 = "📌 Sesión 14: Ecuaciones Diferenciales Ordinarias (PVI)"
+sesion = st.sidebar.selectbox("Sesión", [SESION_12, SESION_13, SESION_14])
 
 
 # ----------------------------------------------------------------------------- Sesión 12
@@ -211,7 +213,171 @@ def vista_sesion_13():
             st.error(f"Entrada inválida: {e}")
 
 
+# ----------------------------------------------------------------------------- Sesión 14
+COLORES = {"Euler": "tab:red", "Heun": "tab:orange", "RK3": "tab:green", "RK4": "tab:purple"}
+CASO_F = "(x^2-y^2)/(x*y)"
+CASO_EXACTA = "sqrt((x^4+7)/(2*x^2))"
+
+
+def graficar_pvi(df, titulo=""):
+    """Curva exacta continua (o de referencia) y cada método como puntos + línea discontinua."""
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    x = df["x_i"].to_numpy()
+    curva = df.attrs.get("curva", {"x": x, "y": df["y_Exacto"]})
+    xd, yd = curva["x"], curva["y"]
+    ax.plot(xd, yd, "-", color="tab:blue", lw=2, label="Exacta / referencia")
+    for nm, col in COLORES.items():
+        if f"y_{nm}" in df:
+            ax.plot(x, df[f"y_{nm}"], "o--", color=col, ms=4 if len(x) < 60 else 0, lw=1.2, label=nm)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_title(titulo)
+    ax.grid(alpha=0.3)
+    ax.legend()
+    st.pyplot(fig)
+    plt.close(fig)
+
+
+def seleccion_metodos(key):
+    sel = st.multiselect("Métodos", list(od.NOMBRES.values()), default=list(od.NOMBRES.values()), key=key)
+    inv = {v: k for k, v in od.NOMBRES.items()}
+    return [inv[s] for s in sel]
+
+
+def formato_pvi(df):
+    fmt = {c: "{:.6f}" for c in df.columns if c.startswith(("y_", "Error_Abs")) or c == "x_i"}
+    fmt.update({c: "{:.4f}" for c in df.columns if c.startswith("Error_Rel")})
+    return df.style.format(fmt, na_rep="—")
+
+
+def metricas_pvi(df, metodos, etiqueta_exacta):
+    fin = df.iloc[-1]
+    cols = st.columns(len(metodos) + 1)
+    cols[0].metric(etiqueta_exacta, f"{fin['y_Exacto']:.6f}")
+    for col, m in zip(cols[1:], metodos):
+        nm = od.NOMBRES[m]
+        err = fin[f"Error_Rel_%_{nm}"]
+        col.metric(nm, f"{fin[f'y_{nm}']:.6f}", f"{err:.4f} % error" if np.isfinite(err) else None,
+                   delta_color="off")
+
+
+def vista_sesion_14():
+    st.title("Ecuaciones Diferenciales Ordinarias: Problemas de Valor Inicial")
+    tab1, tab2, tab3 = st.tabs(["Guía autónoma (caso de estudio)", "Evaluador personalizado f(x, y)",
+                                "Análisis de convergencia (h → 0)"])
+
+    with tab1:
+        st.subheader("PVI del caso de estudio")
+        st.latex(r"(y^2-x^2)\,dx + x\,y\,dy = 0,\quad y(1)=2"
+                 r"\;\Rightarrow\; \frac{dy}{dx}=\frac{x^2-y^2}{xy}=\frac{x}{y}-\frac{y}{x}")
+        st.latex(r"y(x)=\sqrt{\dfrac{x^4+7}{2x^2}}\quad\text{(solución exacta)}")
+        c1, c2 = st.columns(2)
+        h = c1.selectbox("Paso h", [0.1, 0.05, 0.025, 0.01], key="h14g")
+        xt = c2.number_input("x objetivo", value=1.2, min_value=1.05, max_value=5.0, step=0.1, key="xt14g")
+        df = od.solve_pvi(CASO_F, 1, 2, xt, h, exacta=CASO_EXACTA)
+        metricas_pvi(df, list(od.NOMBRES), f"y({xt:g}) exacto")
+        st.markdown("#### Tabla comparativa")
+        st.dataframe(formato_pvi(df), width="stretch", hide_index=True)
+        graficar_pvi(df, f"y(x): exacta vs métodos numéricos (h = {df.attrs['h']:.4g})")
+        with st.expander("Paso a paso: Euler y Heun"):
+            for m in ("euler", "heun"):
+                st.markdown(f"**{od.NOMBRES[m]}**")
+                det = od.iteraciones_detalle(CASO_F, 1, 2, xt, m, h=h)
+                st.dataframe(det.style.format("{:.6f}", subset=[c for c in det.columns if c != "i"]),
+                             width="stretch", hide_index=True)
+
+    with tab2:
+        st.subheader("Evaluador personalizado de EDOs")
+        st.latex(r"\frac{dy}{dx}=f(x,y),\qquad y(x_0)=y_0")
+        expr_str = entrada_funcion("f14", "x - y + 2", ("x", "y"), "f(x, y, parámetros)")
+        params = parametros_auto("f14", expr_str, ("x", "y"))
+        c1, c2, c3 = st.columns(3)
+        modo = st.radio("Definir la malla con", ["Paso h", "Número de pasos n"], horizontal=True, key="modo14")
+        try:
+            x0 = limite("x₀", "0", "x014", c1)
+            y0 = limite("y₀", "1", "y014", c2)
+            xt = limite("x objetivo", "1", "xt14", c3)
+            if modo == "Paso h":
+                h = st.number_input("h", value=0.1, min_value=1e-6, format="%g", key="h14")
+                n = None
+            else:
+                n = int(st.number_input("n", value=10, min_value=1, max_value=200000, step=1, key="n14"))
+                h = None
+            metodos = seleccion_metodos("met14")
+            if not metodos:
+                st.warning("Seleccione al menos un método.")
+            else:
+                _, expr = od.construir_f(expr_str, params)
+                st.latex(r"\frac{dy}{dx}=" + sp.latex(expr))
+                with st.spinner("Resolviendo…"):
+                    df = od.solve_pvi(expr_str, x0, y0, xt, h, metodos, params, n=n)
+                st.session_state["pvi_custom"] = dict(expr=expr_str, params=params, x0=x0, y0=y0, xt=xt)
+                fuente = df.attrs["fuente_exacta"]
+                st.caption(f"n = {df.attrs['n']} pasos, h = {df.attrs['h']:.6g}. Valores exactos: {fuente}.")
+                if not np.isfinite(df["y_Exacto"]).all():
+                    st.warning("La solución exacta/de referencia no existe en todo el intervalo "
+                               "(posible singularidad); los errores no se pueden calcular ahí.")
+                metricas_pvi(df, metodos, "y exacto" if "dsolve" in fuente else "y referencia")
+                st.dataframe(formato_pvi(df), width="stretch", hide_index=True)
+                graficar_pvi(df, "Solución del PVI")
+                with st.expander("Paso a paso (tablas de iteración)"):
+                    for m in metodos:
+                        st.markdown(f"**{od.NOMBRES[m]}**")
+                        det = od.iteraciones_detalle(expr_str, x0, y0, xt, m, h=h, n=n, params=params)
+                        st.dataframe(det.style.format("{:.6f}", subset=[c for c in det.columns if c != "i"]),
+                                     width="stretch", hide_index=True)
+        except Exception as e:
+            st.session_state.pop("pvi_custom", None)
+            st.error(f"Entrada inválida: {e}")
+
+    with tab3:
+        st.subheader("Convergencia al disminuir h")
+        opciones = ["Caso guía"] + (["Función de la pestaña 2"] if "pvi_custom" in st.session_state else [])
+        origen = st.radio("PVI", opciones, horizontal=True, key="orig14")
+        if origen == "Caso guía":
+            args = dict(f_expr=CASO_F, x0=1, y0=2, x_target=1.2, exacta=CASO_EXACTA)
+            st.caption("(y² − x²)dx + xy dy = 0, y(1) = 2, en x = 1.2")
+        else:
+            c = st.session_state["pvi_custom"]
+            args = dict(f_expr=c["expr"], x0=c["x0"], y0=c["y0"], x_target=c["xt"], params=c["params"])
+            st.caption(f"y' = {c['expr']}, y({c['x0']:g}) = {c['y0']:g}, en x = {c['xt']:g}")
+        h_txt = st.text_input("Valores de h (separados por coma)", "0.1, 0.05, 0.01, 0.005, 0.001", key="hl14")
+        try:
+            h_list = [float(v) for v in h_txt.split(",") if v.strip()]
+            if not h_list or min(h_list) <= 0:
+                raise ValueError("h debe ser positivo")
+            conv = od.convergence_analysis_pvi(h_list=h_list, **args)
+            st.caption(f"Valores exactos: {conv.attrs['fuente_exacta']}.")
+            rel = conv[["h", "n"] + [c for c in conv.columns if c.startswith("Error_Rel")]]
+            rel = rel.rename(columns=lambda c: c.replace("Error_Rel_%_", "Error rel. % "))
+            st.markdown("#### Error relativo (%) en x objetivo")
+            fmt = {c: "{:.3e}" for c in rel.columns if c.startswith("Error")}
+            fmt["h"] = "{:.4g}"
+            st.dataframe(rel.style.format(fmt, na_rep="—"), width="stretch", hide_index=True)
+            with st.expander("Tabla completa (valores y errores absolutos)"):
+                st.dataframe(conv, width="stretch", hide_index=True)
+            fig, ax = plt.subplots(figsize=(8, 4.5))
+            for nm, col in COLORES.items():
+                e = conv[f"Error_Rel_%_{nm}"].to_numpy()
+                ok = np.isfinite(e) & (e > 0)
+                if ok.any():
+                    ax.loglog(conv["h"][ok], e[ok], "o-", color=col, label=nm)
+            ax.set_xlabel("h")
+            ax.set_ylabel("Error relativo (%)")
+            ax.set_title("Error vs. tamaño de paso (escala log-log)")
+            ax.grid(alpha=0.3, which="both")
+            ax.legend()
+            st.pyplot(fig)
+            plt.close(fig)
+            st.caption("La pendiente de cada recta indica el orden del método: Euler ≈ 1, Heun ≈ 2, RK3 ≈ 3, "
+                       "RK4 ≈ 4. Las curvas que se aplanan o desaparecen llegaron al límite de precisión de la máquina.")
+        except Exception as e:
+            st.error(f"Entrada inválida: {e}")
+
+
 if sesion == SESION_12:
     vista_sesion_12()
-else:
+elif sesion == SESION_13:
     vista_sesion_13()
+else:
+    vista_sesion_14()

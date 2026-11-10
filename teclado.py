@@ -25,7 +25,10 @@ def _limpiar(key):
 
 
 def entrada_funcion(key, default, var="x", etiqueta="Función"):
-    """Campo de texto + teclado de botones. Retorna la expresión escrita (str)."""
+    """Campo de texto + teclado de botones. var: nombre o tuple de nombres de variables.
+
+    Retorna la expresión escrita (str)."""
+    vars_ = [var] if isinstance(var, str) else list(var)
     k = f"{key}_expr"
     if k not in st.session_state:
         st.session_state[k] = default
@@ -35,7 +38,7 @@ def entrada_funcion(key, default, var="x", etiqueta="Función"):
         filas = [
             ["7", "8", "9", "(", ")", "^", "⌫"],
             ["4", "5", "6", "+", "-", "*", "/"],
-            ["1", "2", "3", ".", var, "pi", "e"],
+            ["1", "2", "3", ".", *vars_, "pi", "e"],
             ["0", "sin(", "cos(", "tan(", "exp(", "ln(", "sqrt("],
             ["abs(", "asin(", "acos(", "atan(", "sinh(", "cosh(", "C"],
         ]
