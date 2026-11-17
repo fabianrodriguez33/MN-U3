@@ -18,7 +18,8 @@ st.set_page_config(page_title="Integración Numérica", layout="wide")
 SESION_12 = "📌 Sesión 12: Regla del Trapecio (Tráfico de Red)"
 SESION_13 = "📌 Sesión 13: Reglas de Simpson (Terreno e Integración Curva)"
 SESION_14 = "📌 Sesión 14: Ecuaciones Diferenciales Ordinarias (PVI)"
-sesion = st.sidebar.selectbox("Sesión", [SESION_12, SESION_13, SESION_14])
+SESION_P = "📝 Práctica: Problemas resueltos"
+sesion = st.sidebar.selectbox("Sesión", [SESION_12, SESION_13, SESION_14, SESION_P])
 
 
 # ----------------------------------------------------------------------------- Sesión 12
@@ -429,9 +430,198 @@ def vista_sesion_14():
             st.error(f"Entrada inválida: {e}")
 
 
+# ----------------------------------------------------------------------------- Práctica
+def sig(x, n=6):
+    """Formato con n cifras significativas."""
+    return f"{x:.{n}g}"
+
+
+def desglose_tramo(py, regla):
+    """Sumas parciales de la fórmula de Simpson de un tramo (None si la regla no es Simpson)."""
+    py = np.asarray(py, dtype=float)
+    n = len(py) - 1
+    if regla == "Simpson 1/3":
+        return {"Extremos f₀ + fₙ": py[0] + py[-1], "4 · Σ impares": 4 * py[1:-1:2].sum(),
+                "2 · Σ pares": 2 * py[2:-1:2].sum()}
+    if regla == "Simpson 3/8":
+        inter, idx = py[1:-1], np.arange(1, n)
+        return {"Extremos f₀ + fₙ": py[0] + py[-1], "3 · Σ (i no múltiplo de 3)": 3 * inter[idx % 3 != 0].sum(),
+                "2 · Σ (i múltiplo de 3)": 2 * inter[idx % 3 == 0].sum()}
+    return None
+
+
+def practica_rack():
+    st.subheader("Problema 1: energía consumida por un rack de servidores")
+    st.markdown("La potencia P(t) de un rack se registró durante una hora: cada 5 min en la primera media hora y "
+                "cada 10 min en la segunda (falla del registrador). La energía consumida es")
+    st.latex(r"E=\int_0^{60}P(t)\,dt")
+    base = pd.DataFrame({"t (min)": [0, 5, 10, 15, 20, 25, 30, 40, 50, 60],
+                         "P (kW)": [120, 134, 151, 163, 158, 147, 140, 152, 171, 165]}).astype(float)
+    df = st.data_editor(base, num_rows="dynamic", width="stretch", key="p1_datos").dropna().sort_values("t (min)")
+    ts_, ps_ = df["t (min)"].to_numpy(float), df["P (kW)"].to_numpy(float)
+    try:
+        tabla, total = ss.integrar_por_tramos(ts_, ps_)
+    except ValueError as e:
+        st.error(str(e))
+        return
+    horas = (ts_[-1] - ts_[0]) / 60
+    E = total / 60
+    trap = sum(ss.trapecio_datos(ps_[a_:b_ + 1], ts_[a_:b_ + 1]) for a_, b_ in _tramos_idx(ts_)) / 60
+
+    st.markdown("#### a) Regla elegida y justificación")
+    lineas = "\n".join(f"- **{r['Tramo']} min:** h = {r['h']:g}, n = {r['n']} → **{r['Regla']}**"
+                       for _, r in tabla.iterrows())
+    st.markdown(
+        f"El paso cambia a mitad de los datos y las reglas compuestas piden puntos igualmente espaciados, así que "
+        f"la integral se parte en tramos de paso uniforme:\n\n{lineas}\n\n"
+        "Simpson 1/3 necesita n par y Simpson 3/8 sirve para n = 3 (o múltiplo de 3); las dos tienen error O(h⁴), "
+        "mejor que el trapecio O(h²), y se pueden combinar sin problema. No se descartan las lecturas de 5 min "
+        "para forzar una h única, porque se perdería información.")
+
+    st.markdown("#### b) Cálculo por tramos")
+    for k, (a_, b_) in enumerate(_tramos_idx(ts_)):
+        r = tabla.iloc[k]
+        d = desglose_tramo(ps_[a_:b_ + 1], r["Regla"])
+        if d is None:
+            continue
+        factor = r["h"] / 3 if r["Regla"] == "Simpson 1/3" else 3 * r["h"] / 8
+        filas = [{"Término": a, "Valor": v} for a, v in d.items()]
+        filas.append({"Término": "Suma", "Valor": sum(d.values())})
+        filas.append({"Término": f"Factor ({'h/3' if r['Regla'] == 'Simpson 1/3' else '3h/8'})", "Valor": factor})
+        filas.append({"Término": "Integral (kW·min)", "Valor": r["Integral"]})
+        st.markdown(f"**Tramo {r['Tramo']} min: {r['Regla']}**")
+        st.dataframe(pd.DataFrame(filas).style.format({"Valor": "{:.6g}"}), width="stretch", hide_index=True)
+
+    st.markdown("#### c) Resultados")
+    res = pd.DataFrame({
+        "Resultado": ["Integral total (kW·min)", "Energía E (kWh) = total / 60",
+                      "Potencia promedio P̄ (kW) = E / horas", "Trapecio por tramos, comparación (kWh)",
+                      "Diferencia Simpson − trapecio (kWh)"],
+        "Valor": [sig(total), sig(E), sig(E / horas), sig(trap), sig(E - trap)]})
+    st.dataframe(res, width="stretch", hide_index=True)
+
+    with st.expander("Registro de datos de entrada del programa"):
+        reg = pd.DataFrame({"Parámetro": ["Intervalo [a, b]", "Duración", "Datos", "Conversión", "Tramos detectados",
+                                          "Condiciones iniciales"],
+                            "Valor": [f"[{ts_[0]:g}, {ts_[-1]:g}] min", f"{horas:g} h", f"{len(ts_)} puntos (t, P)",
+                                      "kW·min ÷ 60 = kWh",
+                                      "; ".join(f"{r['Tramo']}: h={r['h']:g}, n={r['n']}, {r['Regla']}"
+                                                for _, r in tabla.iterrows()),
+                                      "No aplica (es una integral)"]})
+        st.dataframe(reg, width="stretch", hide_index=True)
+        st.dataframe(tabla.style.format({"h": "{:g}", "Integral": "{:.6g}"}), width="stretch", hide_index=True)
+
+    st.markdown("#### d) Pregunta de comprensión")
+    st.markdown(
+        "**¿Por qué no se puede aplicar una sola regla de Simpson en todo [0, 60]? ¿Qué características de los "
+        "datos determinaron la elección?**\n\n"
+        "Porque las reglas compuestas suponen que todos los subintervalos miden lo mismo, y aquí el paso es 5 min "
+        "en la primera media hora y 10 min en la segunda. Con una h fija los pesos (1, 4, 2, 4, …) quedarían mal "
+        "planteados. Lo que decidió la regla fue: (1) el paso h, constante solo dentro de cada mitad; (2) el número "
+        "de subintervalos: 6 en [0, 30] (par, Simpson 1/3) y 3 en [30, 60] (impar, Simpson 3/8); y (3) aprovechar "
+        "todas las lecturas en vez de descartar las de 5 min.")
+
+
+def practica_pvi():
+    st.subheader("Problema 2: PVI con Runge-Kutta")
+    st.latex(r"x\,dy-(2x+y)\,dx=0,\quad y(1)=1\;\Rightarrow\;\frac{dy}{dx}=2+\frac{y}{x}")
+    st.caption("Analítica: y' − y/x = 2 ⇒ y = x(2 ln x + 1).")
+    expr_str = entrada_funcion("p2f", "2 + y/x", ("x", "y"), "f(x, y)")
+    params = parametros_auto("p2f", expr_str, ("x", "y"))
+    c1, c2, c3 = st.columns(3)
+    c4, c5, c6 = st.columns(3)
+    try:
+        x0 = limite("x₀", "1", "p2x0", c1)
+        y0 = limite("y₀", "1", "p2y0", c2)
+        xt = limite("x objetivo", "2.6", "p2xt", c3)
+        h = c4.number_input("Paso h", value=0.2, min_value=1e-6, format="%g", key="p2h")
+        nombre = c5.selectbox("Método Runge-Kutta", ["RK4", "RK3", "Heun (RK2)"], key="p2m")
+        ref = c6.number_input("Valor analítico de referencia", value=7.568659, format="%.6f", key="p2ref")
+        m = {"RK4": "rk4", "RK3": "rk3", "Heun (RK2)": "heun"}[nombre]
+        orden = od.ORDEN[m]
+        _, expr = od.construir_f(expr_str, params)
+        corridas = {}
+        for etq, paso in (("h", h), ("h/2", h / 2)):
+            det = od.iteraciones_detalle(expr_str, x0, y0, xt, m, h=paso, params=params)
+            n = len(det)
+            y_fin = float(det["y_{i+1}"].iloc[-1])
+            corridas[etq] = dict(det=det, n=n, h=(xt - x0) / n, y=y_fin, ea=abs(ref - y_fin),
+                                 er=abs(ref - y_fin) / abs(ref) * 100)
+        a, b = corridas["h"], corridas["h/2"]
+        if abs(a["h"] - h) > 1e-9:
+            st.warning(f"(x objetivo − x₀)/h no es entero: se usó h = {a['h']:.6g} para llegar exacto.")
+
+        st.markdown("#### a) Método, paso y validación")
+        razon = a["ea"] / b["ea"] if b["ea"] > 0 else float("nan")
+        richardson = (b["y"] - a["y"]) / (2 ** orden - 1)
+        st.markdown(
+            f"- **Método:** {nombre} (orden {orden}, error global O(h^{orden})). La ecuación es suave en "
+            f"[{x0:g}, {xt:g}] (x > 0, sin singularidades), así que un método de orden alto da buena precisión "
+            f"con pocos pasos.\n"
+            f"- **Paso:** h = {a['h']:g} → n = {a['n']} pasos que caen exactos en x = {xt:g}. Es pequeño frente a lo "
+            f"que cambia la solución en el intervalo.\n"
+            f"- **Validación con h/2 = {b['h']:g} (n = {b['n']}):** los resultados difieren en "
+            f"{sig(abs(b['y'] - a['y']), 3)}, y el error real baja unas {sig(razon, 3)} veces "
+            f"(un método de orden {orden} debería bajar ≈ 2^{orden} = {2 ** orden}). Estimación del error de h/2 "
+            f"(Richardson): {sig(abs(richardson), 3)}.")
+
+        st.markdown("#### b) Resultados y errores relativos")
+        tabla = pd.DataFrame({
+            "Paso": ["h", "h/2"],
+            "h": [sig(a["h"]), sig(b["h"])],
+            "n": [a["n"], b["n"]],
+            f"y({xt:g}) {nombre}": [f"{a['y']:.6f}", f"{b['y']:.6f}"],
+            "Error absoluto": [sig(a["ea"], 6), sig(b["ea"], 6)],
+            "Error relativo (%)": [sig(a["er"], 6), sig(b["er"], 6)]})
+        st.dataframe(tabla, width="stretch", hide_index=True)
+        st.caption(f"Error medido contra el valor analítico dado, y({xt:g}) = {ref:.6f}.")
+
+        with st.expander("Registro de datos de entrada del programa"):
+            reg = pd.DataFrame({"Parámetro": ["Ecuación", "f(x, y)", "x₀", "y₀ (condición inicial)", "x objetivo",
+                                              "Método", "h  (n)", "h/2  (n)", "Referencia"],
+                                "Valor": ["x dy − (2x + y) dx = 0" if expr_str.replace(" ", "") == "2+y/x"
+                                          else "dy/dx = f(x, y)",
+                                          str(expr), sig(x0), sig(y0), sig(xt), nombre,
+                                          f"{sig(a['h'])}  ({a['n']})", f"{sig(b['h'])}  ({b['n']})", sig(ref, 7)]})
+            st.dataframe(reg, width="stretch", hide_index=True)
+
+        with st.expander("Paso a paso (tablas de iteración)"):
+            for etq in ("h", "h/2"):
+                st.markdown(f"**{nombre}, {etq} = {corridas[etq]['h']:g}**")
+                d = corridas[etq]["det"]
+                st.dataframe(d.style.format("{:.6f}", subset=[c for c in d.columns if c != "i"]),
+                             width="stretch", hide_index=True)
+
+        fig, ax = plt.subplots(figsize=(8, 4))
+        for etq, col in (("h", "tab:red"), ("h/2", "tab:green")):
+            d = corridas[etq]["det"]
+            xs_ = np.append(d["x_i"].to_numpy(), xt)
+            ys_ = np.append(d["y_i"].to_numpy(), corridas[etq]["y"])
+            ax.plot(xs_, ys_, "o--", color=col, ms=4, label=f"{nombre}, {etq} = {corridas[etq]['h']:g}")
+        ax.set_xlabel("x")
+        ax.set_ylabel("y")
+        ax.grid(alpha=0.3)
+        ax.legend()
+        st.pyplot(fig)
+        plt.close(fig)
+    except Exception as e:
+        st.error(f"Entrada inválida: {e}")
+
+
+def vista_practica():
+    st.title("Práctica: problemas resueltos con el programa")
+    t1, t2 = st.tabs(["Problema 1: energía del rack (Newton-Cotes)", "Problema 2: PVI (Runge-Kutta)"])
+    with t1:
+        practica_rack()
+    with t2:
+        practica_pvi()
+
+
 if sesion == SESION_12:
     vista_sesion_12()
 elif sesion == SESION_13:
     vista_sesion_13()
-else:
+elif sesion == SESION_14:
     vista_sesion_14()
+else:
+    vista_practica()

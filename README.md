@@ -79,6 +79,16 @@ Caso guía: `(y² − x²)dx + xy dy = 0`, `y(1) = 2`, solución `y = √((x⁴+
 La pestaña de convergencia muestra el error relativo en `x = 1.2` para `h ∈ {0.1, 0.05, 0.01, 0.005, 0.001}` y su
 gráfico log-log (pendientes ≈ 1, 2, 3, 4).
 
+## Práctica · problemas resueltos
+
+La sección **Práctica** del menú resuelve dos problemas con justificación, registro de datos de entrada y
+resultados con 6 cifras significativas:
+
+1. **Energía de un rack** (datos con paso variable): Simpson 1/3 en [0, 30] y Simpson 3/8 en [30, 60] →
+   E = 153.347 kWh, P̄ = 153.347 kW.
+2. **PVI** `x dy − (2x + y) dx = 0`, `y(1) = 1`, y(2.6) con Runge-Kutta, validando con h y h/2.
+   Con RK4: h = 0.2 → 7.568600 (error rel. 7.85e-4 %); h = 0.1 → 7.568656 (error rel. 4.61e-5 %).
+
 ## Despliegue en Streamlit Community Cloud
 
 1. Subir el repositorio a GitHub (rama `main`).
