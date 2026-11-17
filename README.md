@@ -41,6 +41,11 @@ parámetros (`A`, `k`, `a`, `b`…) se detectan solos y se piden como campos num
     3/8 (n múltiplo 3):  I ≈ (3h/8) [f0 + 3 Σ_{i≠3k} f_i + 2 Σ f_{3k} + f_n]
     Combinado (n ≥ 2):   1/3 en los primeros subintervalos pares y 3/8 en los últimos 3 si n es impar
 
+**Modo 3 · Datos con paso variable:** parte los datos en tramos de paso uniforme y elige la regla de cada uno
+(`n = 1` trapecio, `n` par Simpson 1/3, `n` múltiplo de 3 Simpson 3/8, otro impar combinado). Ejemplo: potencia de un
+rack con lecturas cada 5 min en [0, 30] y cada 10 min en [30, 60] → Simpson 1/3 (4403.33) + Simpson 3/8 (4777.50)
+= 9180.83 kW·min = **153.01 kWh**, potencia promedio 153.01 kW.
+
 Terreno (`h = 5 m`, `n = 6`): Trapecio 78.7500 m², Simpson 1/3 78.8333 m², Simpson 3/8 78.9375 m².
 
 | Integral | Exacto | n | Método | Aproximación | Error abs. | Error rel. |

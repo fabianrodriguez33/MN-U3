@@ -175,3 +175,33 @@ def segmentos_interpolantes(xs, ys, metodo):
         segs.append((px[0], px[-1], np.polyfit(px, py, s)))
         i += s
     return segs
+
+
+def integrar_por_tramos(x, y):
+    """Datos con paso variable: parte en tramos de paso uniforme y elige la regla de cada uno.
+
+    n = 1 trapecio; n par Simpson 1/3; n múltiplo de 3 Simpson 3/8; otro n impar combinado.
+    Retorna (DataFrame por tramo, integral total)."""
+    xs, ys = np.asarray(x, dtype=float), np.asarray(y, dtype=float)
+    if xs.shape != ys.shape or xs.size < 2 or np.any(np.diff(xs) <= 0):
+        raise ValueError("x e y deben tener igual longitud (>= 2) y x estrictamente creciente")
+    d = np.diff(xs)
+    filas, i = [], 0
+    while i < len(d):
+        j = i
+        while j + 1 < len(d) and np.isclose(d[j + 1], d[i], rtol=1e-9, atol=1e-12):
+            j += 1
+        n = j - i + 1
+        px, py = xs[i: j + 2], ys[i: j + 2]
+        if n == 1:
+            regla, I = "Trapecio", trapecio_datos(py, px)
+        elif n % 2 == 0:
+            regla, I = "Simpson 1/3", simpson_13_compuesto(py, x=px)[2]
+        elif n % 3 == 0:
+            regla, I = "Simpson 3/8", simpson_38_compuesto(py, x=px)[2]
+        else:
+            regla, I = "Simpson combinado (1/3 + 3/8)", simpson_combinado(py, px)[2]
+        filas.append({"Tramo": f"[{px[0]:g}, {px[-1]:g}]", "h": d[i], "n": n, "Regla": regla, "Integral": I})
+        i = j + 1
+    tabla = pd.DataFrame(filas)
+    return tabla, float(tabla["Integral"].sum())

@@ -10,6 +10,7 @@ import streamlit as st
 import ode_solver as od
 import simpson_solver as ss
 import trapezoidal_solver as ts
+from parser_util import evaluar_numero
 from teclado import entrada_funcion, limite, parametros_auto
 
 st.set_page_config(page_title="Integración Numérica", layout="wide")
@@ -123,13 +124,26 @@ def graficar_simpson(xs, ys, metodo, titulo, f=None):
     plt.close(fig)
 
 
+def _tramos_idx(xs):
+    """Pares (inicio, fin) de índices de cada tramo de paso uniforme."""
+    d, out, i = np.diff(xs), [], 0
+    while i < len(d):
+        j = i
+        while j + 1 < len(d) and np.isclose(d[j + 1], d[i], rtol=1e-9, atol=1e-12):
+            j += 1
+        out.append((i, j + 1))
+        i = j + 1
+    return out
+
+
 def vista_sesion_13():
     st.title("Integración Numérica: Reglas de Simpson 1/3 y 3/8")
     with st.expander("Fórmulas"):
         st.latex(r"I_{S1/3}=\frac h3\Big[f_0+4\sum_{impar}f_i+2\sum_{par}f_j+f_n\Big],\quad n\ \text{par}")
         st.latex(r"I_{S3/8}=\frac{3h}8\Big[f_0+3\sum_{i\ne 3k}f_i+2\sum_{k}f_{3k}+f_n\Big],\quad n\ \text{múltiplo de }3")
         st.latex(r"|E_{1/3}|\le \frac{n h^5}{180}\max|f^{(4)}|")
-    tab1, tab2 = st.tabs(["Modo 1: Datos tabulares", "Modo 2: Función continua"])
+    tab1, tab2, tab3 = st.tabs(["Modo 1: Datos tabulares", "Modo 2: Función continua",
+                                "Modo 3: Datos con paso variable"])
 
     with tab1:
         st.subheader("Perfil de elevación de un terreno")
@@ -212,6 +226,46 @@ def vista_sesion_13():
         except Exception as e:
             st.error(f"Entrada inválida: {e}")
 
+    with tab3:
+        st.subheader("Datos con paso variable (varios tramos)")
+        st.caption("Si el paso cambia a mitad de los datos, se parte en tramos de paso uniforme y a cada tramo "
+                   "se le aplica la regla que corresponde a su número de subintervalos.")
+        base3 = pd.DataFrame({"t": [0, 5, 10, 15, 20, 25, 30, 40, 50, 60],
+                              "P": [120, 131, 151, 163, 158, 147, 140, 152, 171, 165]}).astype(float)
+        df3 = st.data_editor(base3, num_rows="dynamic", width="stretch", key="paso_variable").dropna()
+        c1, c2 = st.columns(2)
+        factor = c1.number_input("Dividir la integral entre (conversión de unidades)", value=60.0,
+                                 min_value=1e-9, format="%g", key="fac3",
+                                 help="Ej.: t en minutos y P en kW → dividir entre 60 da kWh")
+        dur = c2.text_input("Duración del intervalo en las unidades finales (para el promedio)", "1", key="dur3")
+        try:
+            df3 = df3.sort_values("t")
+            tabla3, total = ss.integrar_por_tramos(df3["t"].to_numpy(float), df3["P"].to_numpy(float))
+            st.dataframe(tabla3.style.format({"h": "{:g}", "Integral": "{:.4f}"}), width="stretch", hide_index=True)
+            tr = sum(ss.trapecio_datos(df3["P"].to_numpy(float)[a_:b_ + 1], df3["t"].to_numpy(float)[a_:b_ + 1])
+                     for a_, b_ in _tramos_idx(df3["t"].to_numpy(float)))
+            T = evaluar_numero(dur)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Integral total", f"{total:.4f}")
+            m2.metric("Convertida (÷ factor)", f"{total / factor:.4f}")
+            m3.metric("Promedio sobre la duración", f"{total / factor / T:.4f}")
+            st.caption(f"Trapecio compuesto por tramos, para comparar: {tr / factor:.4f} "
+                       f"(diferencia {abs(total - tr) / factor:.4f}).")
+            ts_ = df3["t"].to_numpy(float)
+            fig, ax = plt.subplots(figsize=(9, 4.5))
+            ax.plot(ts_, df3["P"], "o-", color="tab:blue", label="datos")
+            for k, (a_, b_) in enumerate(_tramos_idx(ts_)):
+                px, py = ts_[a_:b_ + 1], df3["P"].to_numpy(float)[a_:b_ + 1]
+                ax.fill_between(px, 0, py, alpha=0.3, color=["tab:orange", "tab:green"][k % 2],
+                                label=f"{tabla3['Regla'][k]} {tabla3['Tramo'][k]}")
+            ax.set_xlabel("t")
+            ax.set_ylabel("P")
+            ax.grid(alpha=0.3)
+            ax.legend()
+            st.pyplot(fig)
+            plt.close(fig)
+        except Exception as e:
+            st.error(f"Entrada inválida: {e}")
 
 # ----------------------------------------------------------------------------- Sesión 14
 COLORES = {"Euler": "tab:red", "Heun": "tab:orange", "RK3": "tab:green", "RK4": "tab:purple"}
